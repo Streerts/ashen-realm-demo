@@ -1,1 +1,168 @@
-see-local-file
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<title>Ashen Realm — Emberford</title>
+<style>
+  :root { --panel:#141c1aee; --gold:#e6c36a; --hp:#c45c4a; }
+  * { box-sizing:border-box; touch-action:manipulation; }
+  html,body { margin:0; height:100%; background:#0b100f; color:#e8e0d0; font-family:Georgia,serif; overflow:hidden; }
+  canvas { display:block; width:100%; height:100%; }
+  #hud { position:absolute; inset:0; pointer-events:none; }
+  #hud > * { pointer-events:auto; }
+  #top { position:absolute; top:8px; left:8px; right:8px; display:flex; gap:8px; }
+  .panel { background:var(--panel); border:1px solid #3a4a3f; border-radius:10px; padding:8px 10px; backdrop-filter:blur(6px); }
+  #stats { min-width:158px; font-size:13px; line-height:1.35; }
+  #stats b { color:var(--gold); }
+  #quest { flex:1; font-size:13px; max-width:300px; }
+  #bars { position:absolute; bottom:86px; left:8px; width:168px; font-size:12px; }
+  .bar { height:9px; background:#1a2220; border-radius:6px; overflow:hidden; margin:3px 0 6px; border:1px solid #334; }
+  .bar > i { display:block; height:100%; background:var(--hp); }
+  .bar.xp > i { background:#6aa3c9; }
+  #dock { position:absolute; bottom:8px; left:8px; right:8px; display:flex; gap:6px; justify-content:center; flex-wrap:wrap; }
+  button.ui { background:#1c2824; color:#e8e0d0; border:1px solid #4a5d4e; border-radius:10px; padding:10px 12px; font:600 13px/1 Georgia,serif; }
+  button.ui:active { transform:scale(.97); }
+  button.ui.wide { width:100%; margin-top:6px; }
+  #log { position:absolute; bottom:86px; right:8px; width:min(250px,46vw); max-height:130px; overflow:auto; font-size:12px; }
+  #modal { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:min(360px,94vw); max-height:78vh; overflow:auto; display:none; z-index:5; }
+  #modal h3 { margin:0 0 6px; color:var(--gold); }
+  #modal p { margin:0 0 8px; font-size:13px; opacity:.92; }
+  .row { display:flex; justify-content:space-between; gap:8px; align-items:center; padding:6px 0; border-bottom:1px solid #2a3830; font-size:13px; }
+  .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .slot { background:#0e1513; border:1px solid #3a4a3f; border-radius:8px; min-height:50px; padding:6px; font-size:11px; text-align:center; }
+  #title { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 30%,#1c2a24,#070a09 70%); z-index:8; }
+  #title h1 { margin:0 0 6px; font-size:34px; letter-spacing:.08em; color:var(--gold); }
+  #title p { margin:0 0 16px; max-width:340px; opacity:.88; }
+  #hint { position:absolute; top:46%; left:50%; transform:translate(-50%,90px); font-size:12px; opacity:.7; pointer-events:none; text-shadow:0 1px 4px #000; }
+</style>
+</head>
+<body>
+<div id="wrap" style="position:relative;width:100%;height:100%">
+  <canvas id="c"></canvas>
+  <div id="hud">
+    <div id="top"><div id="stats" class="panel"></div><div id="quest" class="panel"></div></div>
+    <div id="bars" class="panel">HP <div class="bar"><i id="hpbar"></i></div>Next skill XP <div class="bar xp"><i id="xpbar"></i></div></div>
+    <div id="log" class="panel"></div>
+    <div id="dock">
+      <button class="ui" id="btnInv">Pack</button>
+      <button class="ui" id="btnBank">Bank</button>
+      <button class="ui" id="btnSkills">Skills</button>
+      <button class="ui" id="btnPlace">Build</button>
+    </div>
+    <div id="modal" class="panel"></div>
+    <div id="hint">Tap ground to walk. Tap a building, stall, tree, rock, or person.</div>
+  </div>
+  <div id="title"><div class="panel" style="text-align:center;padding:28px 22px"><h1>ASHEN REALM</h1><p>Emberford is open. Forge, mill, kitchen, bank, and market all work.</p><button class="ui" id="btnStart">Enter Emberford</button></div></div>
+</div>
+<script>
+const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+let W=0,H=0,dpr=Math.min(2,devicePixelRatio||1);
+function resize(){ W=innerWidth;H=innerHeight; canvas.width=W*dpr;canvas.height=H*dpr; canvas.style.width=W+'px';canvas.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
+addEventListener('resize',resize); resize();
+const T=48, WORLD=56;
+const lerp=(a,b,t)=>a+(b-a)*t, dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const NAMES=['logs','oak','planks','tin','copper','stone','bronze_bar','bronze_sword','raw_fish','cooked_fish','bread','block','pick','axe'];
+const player={x:28*T,y:36*T,tx:28*T,ty:36*T,speed:150,hp:42,maxhp:42,crowns:40,name:'Wanderer',
+  skills:{woodcutting:1,mining:1,attack:1,smithing:1,crafting:1,cooking:1,fishing:1,construction:1},
+  xp:{woodcutting:0,mining:0,attack:0,smithing:0,crafting:0,cooking:0,fishing:0,construction:0},
+  inv:{logs:0,oak:0,planks:0,tin:0,copper:0,stone:0,bronze_bar:0,bronze_sword:0,raw_fish:0,cooked_fish:3,bread:1,block:3,pick:1,axe:1},
+  bank:{logs:0,oak:0,planks:0,tin:0,copper:0,stone:0,bronze_bar:0,bronze_sword:0,raw_fish:0,cooked_fish:0,bread:0,block:0,pick:0,axe:0}};
+const cam={x:player.x,y:player.y}; const feed=[];
+function say(m){ feed.unshift(m); if(feed.length>9)feed.pop(); document.getElementById('log').innerHTML=feed.join('<br>'); }
+const $=id=>document.getElementById(id);
+function need(s){ return Math.floor(40+player.skills[s]*player.skills[s]*16); }
+function addXp(s,n){ player.xp[s]+=n; while(player.xp[s]>=need(s)&&player.skills[s]<99){ player.xp[s]-=need(s); player.skills[s]++; say(s+' level '+player.skills[s]); } }
+function has(k,n=1){ return (player.inv[k]||0)>=n; }
+function take(k,n=1){ if(!has(k,n)) return false; player.inv[k]-=n; return true; }
+function give(k,n=1){ player.inv[k]=(player.inv[k]||0)+n; }
+const trees=[],rocks=[],mobs=[],npcs=[],buildings=[],fishspots=[],placed=[],walkers=[],critters=[];
+const town={x:22*T,y:30*T,w:16*T,h:12*T};
+function addB(b){ buildings.push(b); npcs.push({x:b.x+b.w/2,y:b.y+b.h+10,name:b.keeper,role:b.role,home:b}); }
+function seed(){
+  addB({x:24*T,y:32*T,w:3.2*T,h:2.4*T,color:'#6b4a32',roof:'#7a2e24',label:'Market',role:'market',keeper:'Mira'});
+  addB({x:28.4*T,y:31.6*T,w:3.4*T,h:2.6*T,color:'#5a5a58',roof:'#3d3d3c',label:'Forge',role:'forge',keeper:'Bram the Smith'});
+  addB({x:32.4*T,y:32.2*T,w:3.2*T,h:2.4*T,color:'#6a5330',roof:'#4a6a38',label:'Mill',role:'mill',keeper:'Nettle'});
+  addB({x:24*T,y:36.2*T,w:3.4*T,h:2.4*T,color:'#4a3a32',roof:'#c4b48a',label:'Kitchen',role:'kitchen',keeper:'Cook Alba'});
+  addB({x:28.6*T,y:36.4*T,w:3.6*T,h:2.6*T,color:'#3a3f4a',roof:'#2a3038',label:'Bank',role:'bank',keeper:'Teller Rowan'});
+  addB({x:33*T,y:36.6*T,w:3.2*T,h:2.4*T,color:'#4a4030',roof:'#6a3a28',label:'Hall',role:'quest',keeper:'Warden Ellis'});
+  for(let i=0;i<80;i++){ let x=(3+Math.random()*50)*T,y=(3+Math.random()*24)*T; if(x>town.x-T&&x<town.x+town.w+T&&y>town.y-T&&y<town.y+town.h+T) continue; trees.push({x,y,hp:8,kind:Math.random()>.8?'oak':'tree',alive:true,t:0}); }
+  for(let i=0;i<46;i++){ const k=Math.random(); rocks.push({x:(4+Math.random()*22)*T,y:(38+Math.random()*14)*T,hp:10,kind:k>.62?'copper':k>.32?'tin':'stone',alive:true,t:0}); }
+  for(let i=0;i<9;i++) mobs.push({x:(40+Math.random()*12)*T,y:(22+Math.random()*16)*T,hp:14,max:14,alive:true,aggro:false});
+  fishspots.push({x:18*T,y:44*T},{x:16.5*T,y:42.5*T},{x:20*T,y:45*T});
+  for(let i=0;i<7;i++){ const n=['Rook','Pebble','Ash','Iota','Gull','Moss','Pip'][i]; walkers.push({x:town.x+Math.random()*town.w,y:town.y+Math.random()*town.h,tx:0,ty:0,name:n,c:'#9bb7c9'}); walkers[i].tx=walkers[i].x; walkers[i].ty=walkers[i].y; }
+  for(let i=0;i<6;i++) critters.push({x:town.x+40+Math.random()*200,y:town.y+40+Math.random()*160,tx:0,ty:0,kind:i%2?'hen':'pup'});
+}
+seed();
+const quest={step:0,text:'Find Warden Ellis in the Hall (southeast town).'};
+function setQ(s,t){ quest.step=s; quest.text=t; hud(); }
+function closest(list,p,r,alive=true){ let b=null,d=r; for(const o of list){ if(alive && o.alive===false) continue; const n=dist(p,o); if(n<d){d=n;b=o;} } return b; }
+function inRect(p,r){ return p.x>=r.x && p.x<=r.x+r.w && p.y>=r.y && p.y<=r.y+r.h; }
+function tryAct(wx,wy){
+  const p={x:wx,y:wy};
+  const b=buildings.find(o=>wx>o.x-8&&wx<o.x+o.w+8&&wy>o.y-8&&wy<o.y+o.h+22);
+  const tr=closest(trees,p,26), rk=closest(rocks,p,26), mb=closest(mobs,p,30), np=closest(npcs,p,34,false), fs=closest(fishspots,p,28,false);
+  if(b){ player.tx=b.x+b.w/2; player.ty=b.y+b.h+14; player.intent={type:'shop',obj:b}; return; }
+  if(np){ player.tx=np.x; player.ty=np.y; player.intent={type:'shop',obj:np.home||np}; return; }
+  if(tr){ player.tx=tr.x; player.ty=tr.y; player.intent={type:'chop',obj:tr}; return; }
+  if(rk){ player.tx=rk.x; player.ty=rk.y; player.intent={type:'mine',obj:rk}; return; }
+  if(mb){ player.tx=mb.x; player.ty=mb.y; player.intent={type:'fight',obj:mb}; return; }
+  if(fs){ player.tx=fs.x; player.ty=fs.y; player.intent={type:'fish',obj:fs}; return; }
+  player.intent=null; player.tx=clamp(wx,T,WORLD*T-T); player.ty=clamp(wy,T,WORLD*T-T);
+}
+function chop(o,dt){ if(dist(player,o)>38) return; if(!has('axe')){ say('You need an axe. Buy one at the Market.'); player.intent=null; return; } o.t+=dt; if(o.t<.42) return; o.t=0; o.hp--; if(o.hp<=0){ o.alive=false; if(o.kind==='oak'){ give('oak'); addXp('woodcutting',30); say('Oak log.'); } else { give('logs'); addXp('woodcutting',16); say('Log.'); } if(quest.step===1) setQ(2,'Take timber to the Mill, or mine south of town.'); setTimeout(()=>{o.alive=true;o.hp=8;},20000);} }
+function mine(o,dt){ if(dist(player,o)>38) return; if(!has('pick')){ say('You need a pick. Mira sells them.'); player.intent=null; return; } o.t+=dt; if(o.t<.48) return; o.t=0; o.hp--; if(o.hp<=0){ o.alive=false; give(o.kind); addXp('mining',o.kind==='stone'?10:22); say('Mined '+o.kind+'.'); if(quest.step===2 && (o.kind==='tin'||o.kind==='copper')) setQ(3,'Smelt bronze at the Forge.'); setTimeout(()=>{o.alive=true;o.hp=10;},22000);} }
+function fish(o,dt){ if(dist(player,o)>36) return; o.t=(o.t||0)+dt; if(o.t<1.1) return; o.t=0; if(Math.random()<.55){ give('raw_fish'); addXp('fishing',18); say('You catch a river fish.'); if(quest.step===4) setQ(5,'Cook the fish at the Kitchen.'); } else say('The line comes back empty.'); }
+function fight(o,dt){ if(!o.alive) return; o.aggro=true; if(dist(player,o)>42){ player.tx=o.x; player.ty=o.y; return; } o.atk=(o.atk||0)+dt; player.atk=(player.atk||0)+dt; if(player.atk>.68){ player.atk=0; const dmg=3+player.skills.attack+(has('bronze_sword')?5:0); o.hp-=dmg; addXp('attack',8); say('Hit '+dmg+'.'); if(o.hp<=0){ o.alive=false; const g=5+Math.floor(Math.random()*10); player.crowns+=g; say('Goblin down. +'+g+' Crowns'); if(quest.step===6) setQ(7,'Return to Warden Ellis.'); setTimeout(()=>{o.alive=true;o.hp=o.max;},15000);} } if(o.atk>1.05){ o.atk=0; player.hp=Math.max(0,player.hp-(2+Math.floor(Math.random()*4))); if(player.hp<=0){ player.hp=player.maxhp; player.x=28*T; player.y=36*T; player.tx=player.x; player.ty=player.y; player.crowns=Math.max(0,player.crowns-10); say('You wake at the Hall. Lost 10 Crowns.'); } } }
+function openModal(html){ const m=$('modal'); m.innerHTML=html; m.style.display='block'; }
+function closeModal(){ $('modal').style.display='none'; }
+function itemRows(obj){ return NAMES.filter(k=>obj[k]>0).map(k=>'<div class="slot">'+k.replace('_',' ')+'<br><b>'+obj[k]+'</b></div>').join('')||'<div class="slot">empty</div>'; }
+function bindClose(){ setTimeout(()=>{ const x=$('x'); if(x) x.onclick=closeModal; },0); }
+function buy(item,cost){ if(player.crowns<cost){ say('Not enough Crowns.'); return; } player.crowns-=cost; give(item); say('Bought '+item.replace('_',' ')+'.'); }
+function sellRaw(){ const g=player.inv.logs*3+player.inv.oak*6+player.inv.tin*5+player.inv.copper*5+player.inv.stone*2+player.inv.raw_fish*4; if(!g){ say('Nothing worth buying.'); return; } player.crowns+=g; player.inv.logs=player.inv.oak=player.inv.tin=player.inv.copper=player.inv.stone=player.inv.raw_fish=0; say('Mira pays '+g+' Crowns.'); }
+function shopMarket(){ openModal('<h3>Mira\'s Market</h3><p>Tools, food, blocks.</p><button class="ui wide" id="b1">Axe — 18c</button><button class="ui wide" id="b2">Pick — 18c</button><button class="ui wide" id="b3">Bread — 5c</button><button class="ui wide" id="b4">Block — 8c</button><button class="ui wide" id="b5">Sell raw goods</button><button class="ui wide" id="x">Close</button>'); setTimeout(()=>{ $('b1').onclick=()=>{buy('axe',18);hud();}; $('b2').onclick=()=>{buy('pick',18);hud();}; $('b3').onclick=()=>{buy('bread',5);hud();}; $('b4').onclick=()=>{buy('block',8);hud();}; $('b5').onclick=()=>{sellRaw();hud();}; bindClose(); },0); }
+function shopForge(){ openModal('<h3>Bram\'s Forge</h3><p>Tin + copper → bar. Bar → sword.</p><button class="ui wide" id="b1">Smelt bronze bar</button><button class="ui wide" id="b2">Smith bronze sword</button><button class="ui wide" id="x">Close</button>'); setTimeout(()=>{ $('b1').onclick=()=>{ if(take('tin')&&take('copper')){ give('bronze_bar'); addXp('smithing',28); say('Bronze bar cools.'); if(quest.step===3) setQ(4,'Fish the south pond, then cook it.'); hud(); } else say('Need tin and copper.'); }; $('b2').onclick=()=>{ if(take('bronze_bar')){ give('bronze_sword'); addXp('smithing',36); say('A serviceable blade.'); hud(); } else say('Need a bronze bar.'); }; bindClose(); },0); }
+function shopMill(){ openModal('<h3>Nettle\'s Mill</h3><p>Timber into planks and blocks.</p><button class="ui wide" id="b1">2 logs → 2 planks</button><button class="ui wide" id="b2">1 oak → 2 planks</button><button class="ui wide" id="b3">2 planks + stone → block</button><button class="ui wide" id="x">Close</button>'); setTimeout(()=>{ $('b1').onclick=()=>{ if(take('logs',2)){ give('planks',2); addXp('crafting',16); say('Planks stacked.'); hud(); } else say('Need 2 logs.'); }; $('b2').onclick=()=>{ if(take('oak')){ give('planks',2); addXp('crafting',22); say('Oak planks.'); hud(); } else say('Need oak.'); }; $('b3').onclick=()=>{ if(take('planks',2)&&take('stone')){ give('block'); addXp('construction',18); say('A solid block.'); hud(); } else say('Need 2 planks and stone.'); }; bindClose(); },0); }
+function shopKitchen(){ openModal('<h3>Alba\'s Kitchen</h3><p>Fire and a pot that never quite goes cold.</p><button class="ui wide" id="b1">Cook raw fish</button><button class="ui wide" id="b2">Eat cooked fish (+12 hp)</button><button class="ui wide" id="b3">Eat bread (+8 hp)</button><button class="ui wide" id="x">Close</button>'); setTimeout(()=>{ $('b1').onclick=()=>{ if(take('raw_fish')){ give('cooked_fish'); addXp('cooking',20); say('Fish crackles.'); if(quest.step===5) setQ(6,'Clear a goblin east of town.'); hud(); } else say('Catch a fish first.'); }; $('b2').onclick=()=>{ if(take('cooked_fish')){ player.hp=Math.min(player.maxhp,player.hp+12); say('Better.'); hud(); }}; $('b3').onclick=()=>{ if(take('bread')){ player.hp=Math.min(player.maxhp,player.hp+8); hud(); }}; bindClose(); },0); }
+function shopBank(){ openModal('<h3>Emberford Bank</h3><p>Goods sit in the vault. Crowns stay on you.</p><div class="grid">'+itemRows(player.bank)+'</div><button class="ui wide" id="b1">Deposit all extras</button><button class="ui wide" id="b2">Withdraw all</button><button class="ui wide" id="x">Close</button>'); setTimeout(()=>{ $('b1').onclick=()=>{ NAMES.forEach(k=>{ player.bank[k]+=player.inv[k]; player.inv[k]=0; }); if(!has('axe')) give('axe'); if(!has('pick')) give('pick'); say('Vault takes the pack.'); shopBank(); hud(); }; $('b2').onclick=()=>{ NAMES.forEach(k=>{ give(k,player.bank[k]); player.bank[k]=0; }); shopBank(); hud(); }; bindClose(); },0); }
+function shopQuest(){ if(quest.step===0){ setQ(1,'Chop a tree north of town.'); say('Ellis: Emberford runs on timber, ore, and hot food.'); } else if(quest.step===7){ setQ(8,'The valley is yours. Keep the shops working.'); player.crowns+=55; give('block',6); say('Ellis pays Crowns and blocks.'); } else say('Ellis: '+quest.text); openModal('<h3>Warden\'s Hall</h3><p>'+quest.text+'</p><button class="ui wide" id="x">Close</button>'); bindClose(); }
+function openShop(b){ player.intent=null; if(dist(player,{x:b.x+b.w/2,y:b.y+b.h+10})>56 && dist(player,b)>80) return; ({market:shopMarket,forge:shopForge,mill:shopMill,kitchen:shopKitchen,bank:shopBank,quest:shopQuest}[b.role]||shopMarket)(); }
+$('btnInv').onclick=()=>{ openModal('<h3>Pack</h3><div class="grid">'+itemRows(player.inv)+'</div><p>Crowns '+player.crowns+'</p><button class="ui wide" id="x">Close</button>'); bindClose(); };
+$('btnBank').onclick=shopBank;
+$('btnSkills').onclick=()=>{ openModal('<h3>Skills</h3>'+Object.keys(player.skills).map(s=>'<div class="row"><span>'+s+'</span><b>'+player.skills[s]+' · '+player.xp[s]+'/'+need(s)+'</b></div>').join('')+'<button class="ui wide" id="x">Close</button>'); bindClose(); };
+$('btnPlace').onclick=()=>{ const plot={x:18.5*T,y:33*T,w:4*T,h:4*T}; if(!inRect(player,plot)){ say('Stand on the gold plot west of the square.'); return; } if(!take('block')){ say('Craft or buy a block first.'); return; } placed.push({x:player.x,y:player.y}); addXp('construction',22); say('Block set.'); };
+function worldFromEvent(e){ const r=canvas.getBoundingClientRect(), t=e.touches?e.touches[0]:e; return {x:t.clientX-r.left+cam.x-W/2, y:t.clientY-r.top+cam.y-H/2}; }
+function onPtr(e){ if($('title').style.display==='none'){ const p=worldFromEvent(e); tryAct(p.x,p.y); $('hint').style.opacity=0; } }
+canvas.addEventListener('mousedown',onPtr); canvas.addEventListener('touchstart',e=>onPtr(e),{passive:true});
+$('btnStart').onclick=()=>{ $('title').style.display='none'; say('World 1 — Emberford. Shops are live.'); };
+function hud(){ $('stats').innerHTML='<b>'+player.name+'</b><br>Crowns '+player.crowns+'<br>Atk '+player.skills.attack+' · WC '+player.skills.woodcutting+' · Mn '+player.skills.mining; $('quest').innerHTML='<b>Emberford</b><br>'+quest.text; $('hpbar').style.width=(player.hp/player.maxhp*100)+'%'; $('xpbar').style.width=(player.xp.woodcutting/need('woodcutting')*100)+'%'; }
+function drawB(b){ ctx.fillStyle='#0005'; ctx.fillRect(b.x+6,b.y+b.h-4,b.w,8); ctx.fillStyle=b.color; ctx.fillRect(b.x,b.y,b.w,b.h); ctx.fillStyle=b.roof; ctx.beginPath(); ctx.moveTo(b.x-8,b.y+8); ctx.lineTo(b.x+b.w/2,b.y-18); ctx.lineTo(b.x+b.w+8,b.y+8); ctx.closePath(); ctx.fill(); ctx.fillStyle='#1a120c'; ctx.fillRect(b.x+b.w/2-8,b.y+b.h-22,16,22); ctx.fillStyle='#e6c36a'; ctx.font='12px Georgia'; ctx.textAlign='center'; ctx.fillText(b.label,b.x+b.w/2,b.y-22); }
+function drawTree(t){ if(!t.alive)return; ctx.fillStyle='#2b4a28'; ctx.beginPath(); ctx.ellipse(t.x,t.y+6,16,8,0,0,7); ctx.fill(); ctx.fillStyle=t.kind==='oak'?'#2f6b38':'#3d7a42'; ctx.beginPath(); ctx.arc(t.x,t.y-16,18,0,7); ctx.fill(); ctx.fillStyle='#6b4428'; ctx.fillRect(t.x-4,t.y-8,8,16); }
+function drawRock(r){ if(!r.alive)return; ctx.fillStyle=r.kind==='copper'?'#b56a3a':r.kind==='tin'?'#9aa4b0':'#6d7270'; ctx.beginPath(); ctx.moveTo(r.x-14,r.y+8); ctx.lineTo(r.x-10,r.y-10); ctx.lineTo(r.x+8,r.y-14); ctx.lineTo(r.x+16,r.y+6); ctx.closePath(); ctx.fill(); }
+function body(p,col,me){ ctx.fillStyle='#0005'; ctx.beginPath(); ctx.ellipse(p.x,p.y+10,10,5,0,0,7); ctx.fill(); ctx.fillStyle=col; ctx.beginPath(); ctx.arc(p.x,p.y-6,8,0,7); ctx.fill(); ctx.fillRect(p.x-7,p.y-2,14,12); if(me&&has('bronze_sword')){ ctx.fillStyle='#c9d2d8'; ctx.fillRect(p.x+8,p.y-10,3,18); } ctx.fillStyle='#f0e6c8'; ctx.font='11px Georgia'; ctx.textAlign='center'; ctx.fillText(p.name||'',p.x,p.y-20); }
+function drawMob(m){ if(!m.alive)return; ctx.fillStyle='#4a6b3a'; ctx.beginPath(); ctx.arc(m.x,m.y-4,9,0,7); ctx.fill(); ctx.fillRect(m.x-8,m.y,16,10); ctx.fillStyle='#c45c4a'; ctx.fillRect(m.x-12,m.y-22,24*(m.hp/m.max),3); }
+let last=performance.now();
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  const dx=player.tx-player.x, dy=player.ty-player.y, d=Math.hypot(dx,dy);
+  if(d>3){ const s=player.speed*dt/d; player.x+=dx*s; player.y+=dy*s; }
+  else if(player.intent){ if(player.intent.type==='chop') chop(player.intent.obj,dt); if(player.intent.type==='mine') mine(player.intent.obj,dt); if(player.intent.type==='fight') fight(player.intent.obj,dt); if(player.intent.type==='fish') fish(player.intent.obj,dt); if(player.intent.type==='shop') openShop(player.intent.obj); }
+  for(const m of mobs){ if(!m.alive||!m.aggro||dist(m,player)>220) continue; const a=Math.atan2(player.y-m.y,player.x-m.x); m.x+=Math.cos(a)*52*dt; m.y+=Math.sin(a)*52*dt; }
+  for(const o of walkers){ if(Math.random()<.006){ o.tx=town.x+20+Math.random()*(town.w-40); o.ty=town.y+20+Math.random()*(town.h-40); } const od=Math.hypot(o.tx-o.x,o.ty-o.y); if(od>2){ o.x+=(o.tx-o.x)/od*36*dt; o.y+=(o.ty-o.y)/od*36*dt; } }
+  for(const c of critters){ if(Math.random()<.01){ c.tx=c.x+(Math.random()-.5)*80; c.ty=c.y+(Math.random()-.5)*80; } const od=Math.hypot((c.tx||c.x)-c.x,(c.ty||c.y)-c.y); if(od>1){ c.x+=((c.tx||c.x)-c.x)/od*28*dt; c.y+=((c.ty||c.y)-c.y)/od*28*dt; } }
+  if(player.hp<player.maxhp) player.hp=Math.min(player.maxhp,player.hp+1.6*dt);
+  cam.x=lerp(cam.x,player.x,.12); cam.y=lerp(cam.y,player.y,.12);
+  ctx.fillStyle='#152018'; ctx.fillRect(0,0,W,H); ctx.save(); ctx.translate(W/2-cam.x,H/2-cam.y);
+  for(let y=0;y<WORLD;y++) for(let x=0;x<WORLD;x++){ const px=x*T,py=y*T; let col=(x+y)%2?'#2a3d2c':'#263828'; if(py>42*T) col=(x+y)%2?'#2a4450':'#243c48'; if(px>town.x&&px<town.x+town.w&&py>town.y&&py<town.y+town.h) col=(x+y)%2?'#3b3a32':'#32312b'; ctx.fillStyle=col; ctx.fillRect(px,py,T-1,T-1); }
+  ctx.strokeStyle='#e6c36a88'; ctx.strokeRect(18.5*T,33*T,4*T,4*T); ctx.fillStyle='#e6c36a'; ctx.font='12px Georgia'; ctx.textAlign='left'; ctx.fillText('Your plot',18.6*T,33*T-6);
+  for(const b of placed){ ctx.fillStyle='#7a5a3a'; ctx.fillRect(b.x-12,b.y-12,24,24); ctx.fillStyle='#5a3e28'; ctx.fillRect(b.x-12,b.y-16,24,6); }
+  buildings.forEach(drawB); trees.forEach(drawTree); rocks.forEach(drawRock);
+  fishspots.forEach(f=>{ ctx.fillStyle='#4aa3c988'; ctx.beginPath(); ctx.arc(f.x,f.y,10,0,7); ctx.fill(); });
+  critters.forEach(c=>{ ctx.fillStyle=c.kind==='hen'?'#d8c4a0':'#8a7a68'; ctx.beginPath(); ctx.arc(c.x,c.y,5,0,7); ctx.fill(); });
+  walkers.forEach(o=>body(o,o.c)); npcs.forEach(n=>body(n,'#c4a46a')); mobs.forEach(drawMob); body(player,'#6a9ad4',true);
+  ctx.restore(); hud(); requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
