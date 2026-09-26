@@ -3,162 +3,153 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
-<title>Ashen Realm — Emberford City</title>
+<title>Emberford Square</title>
 <style>
-  * { box-sizing:border-box; touch-action:manipulation; }
-  html,body { margin:0; height:100%; background:#0a0e0c; color:#efe6d4; font-family:Georgia,serif; overflow:hidden; }
-  canvas { display:block; width:100%; height:100%; }
-  #hud { position:absolute; inset:0; pointer-events:none; }
-  #hud > * { pointer-events:auto; }
-  .panel { background:#101814f0; border:1px solid #5a6d5e88; border-radius:12px; padding:8px 10px; backdrop-filter:blur(8px); }
-  #top { position:absolute; top:8px; left:8px; right:8px; display:flex; gap:8px; }
-  #stats b { color:#e8c56a; }
-  #action { position:absolute; top:46%; left:50%; transform:translate(-50%,-8px); font-size:15px; color:#e8c56a; text-shadow:0 2px 10px #000; pointer-events:none; text-align:center; width:90%; }
-  #dock { position:absolute; bottom:10px; left:8px; right:8px; display:flex; gap:6px; justify-content:center; }
-  button.ui { background:#1c2824; color:#efe6d4; border:1px solid #5a7060; border-radius:11px; padding:10px 12px; font:600 13px Georgia,serif; }
-  #log { position:absolute; bottom:70px; right:8px; width:min(240px,46vw); max-height:110px; overflow:auto; font-size:12px; }
-  #title { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 30%,#1e2c24,#070a09 70%); z-index:5; }
-  #title h1 { margin:0 0 8px; letter-spacing:.12em; color:#e8c56a; font-size:34px; }
+*{box-sizing:border-box;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#1e1a14;color:#f3e6c8;font-family:Georgia,serif;overflow:hidden}
+canvas{display:block;width:100%;height:100%}
+#hud{position:absolute;inset:0;pointer-events:none}
+#hud>*{pointer-events:auto}
+.p{background:#241c14ee;border:1px solid #d2b48c66;border-radius:14px;padding:8px 12px}
+#top{position:absolute;top:8px;left:8px;right:8px;display:flex;gap:8px}
+b{color:#e8c56a}
+#banner{position:absolute;left:50%;top:40%;transform:translate(-50%,0);width:86%;text-align:center;color:#ffe9a8;font-size:16px;text-shadow:0 2px 10px #000;pointer-events:none}
+#log{position:absolute;bottom:70px;right:8px;width:min(220px,42vw);max-height:90px;overflow:auto;font-size:12px}
+#dock{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:8px}
+button{background:#3a2c1c;color:#f3e6c8;border:1px solid #d2b48c88;border-radius:12px;padding:11px 16px;font:600 14px Georgia}
+#cover{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 30%,#4a3828,#16110c 70%);z-index:6}
+#cover h1{margin:0 0 8px;letter-spacing:.14em;color:#e8c56a;font-size:30px}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="hud">
-  <div id="top">
-    <div class="panel" id="stats"></div>
-    <div class="panel" id="quest" style="flex:1;max-width:300px;font-size:13px"></div>
-  </div>
-  <div id="action"></div>
-  <div id="log" class="panel"></div>
-  <div id="dock">
-    <button class="ui" id="btnLook">Look</button>
-    <button class="ui" id="btnCenter">Plaza</button>
-  </div>
+  <div id="top"><div class="p" id="stats"></div><div class="p" id="hint" style="flex:1;max-width:260px;font-size:13px"></div></div>
+  <div id="banner"></div>
+  <div id="log" class="p"></div>
+  <div id="dock"><button id="home">Fountain</button></div>
 </div>
-<div id="title">
-  <div class="panel" style="text-align:center;padding:28px 22px;max-width:360px">
-    <h1>EMBERFORD</h1>
-    <p style="opacity:.85;margin:0 0 16px">Stone streets. 3D halls. You walk around walls. Tap a door or a person.</p>
-    <button class="ui" id="go">Enter the plaza</button>
-  </div>
-</div>
+<div id="cover"><div class="p" style="text-align:center;padding:26px 20px;max-width:340px">
+  <h1>EMBERFORD</h1>
+  <p style="opacity:.88;margin:0 0 14px">A homey square. Big fountain. Shop streets. Tap once.</p>
+  <button id="enter">Walk into town</button>
+</div></div>
 <script>
-const canvas=document.getElementById('c'), ctx=canvas.getContext('2d');
+const canvas=document.getElementById('c'),ctx=canvas.getContext('2d');
 let W=0,H=0,dpr=Math.min(2,devicePixelRatio||1);
-function resize(){ W=innerWidth;H=innerHeight; canvas.width=W*dpr; canvas.height=H*dpr; canvas.style.width=W+'px'; canvas.style.height=H+'px'; ctx.setTransform(dpr,0,0,dpr,0,0); }
-addEventListener('resize',resize); resize();
-const T=40;
-const lerp=(a,b,t)=>a+(b-a)*t, dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y), clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const $ = id => document.getElementById(id);
-const player={x:20*T,y:22*T,tx:20*T,ty:22*T,speed:150,name:'Wanderer'};
+function resize(){W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=W+'px';canvas.style.height=H+'px';ctx.setTransform(dpr,0,0,dpr,0,0)}
+addEventListener('resize',resize);resize();
+const T=34,lerp=(a,b,t)=>a+(b-a)*t,dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y),clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const $=id=>document.getElementById(id);
+const player={x:20*T,y:21*T,tx:20*T,ty:21*T,speed:230};
 const cam={x:player.x,y:player.y};
-const logs=[];
-let bannerT=0, marker=null, time=0, look=false, intent=null;
-function say(m){ logs.unshift(m); if(logs.length>7) logs.pop(); $('log').innerHTML=logs.join('<br>'); }
-function act(m){ bannerT=2.4; say(m); $('action').textContent=m; }
-const buildings=[];
-function add(b){ b.door={x:b.x+b.w/2,y:b.y+b.h}; buildings.push(b); }
-add({x:16.2*T,y:11.2*T,w:7.6*T,h:5.4*T,h3:54,face:'#6b4a32',side:'#4a3224',top:'#8a3328',name:'Town Hall',kind:'hall',keep:'Warden Ellis'});
-add({x:8.4*T,y:14.5*T,w:5.6*T,h:4.6*T,h3:42,face:'#3d4a58',side:'#2a3340',top:'#5a6a78',name:'Library',kind:'lib',keep:'Scribe Iova'});
-add({x:25.8*T,y:14.2*T,w:5.8*T,h:4.8*T,h3:46,face:'#5a5348',side:'#3e392f',top:'#3a3530',name:'Courthouse',kind:'court',keep:'Justice Bram'});
-add({x:9.2*T,y:21.6*T,w:4.8*T,h:3.8*T,h3:34,face:'#6e4c34',side:'#4a3220',top:'#8a3a28',name:'Market',kind:'market',keep:'Mira'});
-add({x:25.6*T,y:21.8*T,w:4.6*T,h:3.6*T,h3:32,face:'#5c5c58',side:'#3a3a38',top:'#2e2e2c',name:'Forge',kind:'forge',keep:'Smith Nettle'});
-add({x:15.4*T,y:24.8*T,w:4.4*T,h:3.4*T,h3:30,face:'#4e3c32',side:'#3a2a24',top:'#c4b48a',name:'Kitchen',kind:'kitchen',keep:'Cook Alba'});
-add({x:20.6*T,y:24.8*T,w:4.2*T,h:3.4*T,h3:36,face:'#3a4250',side:'#242a32',top:'#1c2228',name:'Bank',kind:'bank',keep:'Teller Rowan'});
-add({x:12.2*T,y:8.6*T,w:3.6*T,h:2.8*T,h3:26,face:'#4a4034',side:'#322c24',top:'#6a5a40',name:'Chapel',kind:'chapel',keep:'Brother Pip'});
-add({x:24.2*T,y:8.8*T,w:3.8*T,h:2.8*T,h3:28,face:'#4a5a40',side:'#32402c',top:'#3a4a32',name:'Watch',kind:'watch',keep:'Captain Gull'});
-const keepers=buildings.map(b=>({x:b.door.x+20,y:b.y+b.h+16,name:b.keep,home:b,c:'#c4a46a'}));
-const walkers=[];
-['Rook','Pebble','Ash','Moss','Fern','Iota'].forEach((n,i)=>walkers.push({x:(14+i)*T,y:20*T,tx:(14+i)*T,ty:20*T,name:n,c:['#9bb7c9','#c9a07a','#8fb39a'][i%3]}));
-const plaza={x:16.5*T,y:17.6*T,w:7*T,h:6.2*T};
-function blocked(x,y,pad=10){ for(const b of buildings){ if(x>b.x-pad&&x<b.x+b.w+pad&&y>b.y-pad&&y<b.y+b.h-4) return b; } return null; }
-function hitDoor(b,x,y){ return Math.abs(x-b.door.x)<18 && Math.abs(y-(b.y+b.h))<20; }
-function goNear(x,y){ player.tx=clamp(x,6*T,34*T); player.ty=clamp(y,6*T,32*T); }
-function tryAct(wx,wy){
-  marker={x:wx,y:wy,life:.8};
-  const k=keepers.find(p=>dist({x:wx,y:wy},p)<26);
-  if(k){ goNear(k.x,k.y); intent={type:'talk',who:k}; act('Talk to '+k.name+' at the '+k.home.name+'.'); return; }
-  const door=buildings.find(b=>hitDoor(b,wx,wy));
-  if(door){ goNear(door.door.x, door.y+door.h+14); intent={type:'door',b:door}; act('Door — '+door.name+'.'); return; }
-  const wall=buildings.find(b=>wx>b.x&&wx<b.x+b.w&&wy>b.y&&wy<b.y+b.h);
-  if(wall){ act(wall.name+' walls. Front door or speak to '+wall.keep+'.'); intent=null; goNear(wx,wy); return; }
-  if(wx>plaza.x&&wx<plaza.x+plaza.w&&wy>plaza.y&&wy<plaza.y+plaza.h) act('Walking the plaza.');
-  else act('Walking.');
-  intent=null; goNear(wx,wy);
+const log=[];let bannerT=0,marker=null,time=0,intent=null,cool=0;
+function say(m){if(log[0]===m)return;log.unshift(m);if(log.length>5)log.pop();$('log').innerHTML=log.join('<br>')}
+function act(m){bannerT=2.1;say(m);$('banner').textContent=m}
+const B=[];
+function add(o){o.door={x:o.x+o.w/2,y:o.y+o.h};B.push(o)}
+add({x:16.5*T,y:7.2*T,w:7*T,h:4.2*T,z:40,face:'#c9a06a',side:'#9a784c',top:'#6e3a28',name:'Town Hall',kind:'hall',keep:'Ellis'});
+add({x:6.2*T,y:10.5*T,w:5.2*T,h:3.6*T,z:30,face:'#d8c4a0',side:'#b49a78',top:'#8a4a32',name:'Bakery',kind:'bakery',keep:'Alba'});
+add({x:28.2*T,y:10.4*T,w:5.2*T,h:3.6*T,z:30,face:'#c4b8a4',side:'#9a8e7a',top:'#4a4038',name:'Smithy',kind:'forge',keep:'Nettle'});
+add({x:6.0*T,y:16.6*T,w:4.8*T,h:3.4*T,z:26,face:'#d2b48c',side:'#a88860',top:'#7a3028',name:'Clothier',kind:'tailor',keep:'Fern'});
+add({x:29.0*T,y:16.4*T,w:4.8*T,h:3.4*T,z:26,face:'#c8d0b4',side:'#8a9878',top:'#3a5a38',name:'Florist',kind:'flower',keep:'Iova'});
+add({x:6.4*T,y:22.2*T,w:5.0*T,h:3.2*T,z:28,face:'#c9b7a0',side:'#8e7a64',top:'#5a3a28',name:'Inn',kind:'inn',keep:'Rowan'});
+add({x:28.6*T,y:22.0*T,w:5.0*T,h:3.2*T,z:28,face:'#d0c0a0',side:'#a09070',top:'#8a3a28',name:'General',kind:'shop',keep:'Mira'});
+add({x:16.8*T,y:24.8*T,w:6.4*T,h:3.0*T,z:24,face:'#b8c4b0',side:'#7a8a74',top:'#3a4a38',name:'Greengrocer',kind:'green',keep:'Pip'});
+const keepers=B.map((b,i)=>({x:b.door.x+(i%2?36:-36),y:b.y+b.h+28,name:b.keep,home:b}));
+const folk=[];
+['Rook','Pebble','Ash','Moss','Lumen','Gull'].forEach((n,i)=>folk.push({x:16*T+i*28,y:19.2*T,tx:16*T+i*28,ty:19.2*T,name:n,c:['#9bb0c4','#c4a888','#8eae9a'][i%3]}));
+function inFoot(b,x,y){return x>b.x+6&&x<b.x+b.w-6&&y>b.y+6&&y<b.y+b.h-22}
+function blocked(x,y){for(const b of B) if(inFoot(b,x,y)) return b;return null}
+function unstick(){if(!blocked(player.x,player.y)) return;for(let a=0;a<16;a++){const ang=a*Math.PI/8,nx=player.x+Math.cos(ang)*30,ny=player.y+Math.sin(ang)*30;if(!blocked(nx,ny)){player.x=nx;player.y=ny;player.tx=nx;player.ty=ny;return}}player.x=20*T;player.y=20.4*T;player.tx=player.x;player.ty=player.y;}
+function hitDoor(b,x,y){return Math.abs(x-b.door.x)<26&&Math.abs(y-(b.y+b.h))<28}
+function go(x,y){player.tx=clamp(x,5*T,35*T);player.ty=clamp(y,6*T,29*T)}
+function tap(wx,wy){
+  if(cool>0) return; cool=.22; marker={x:wx,y:wy,life:.55};
+  const k=keepers.find(p=>dist({x:wx,y:wy},p)<34);
+  if(k){go(k.x,k.y+14);intent={t:'talk',k};act('Walking over to '+k.name+'.');return}
+  const door=B.find(b=>hitDoor(b,wx,wy));
+  if(door){go(door.door.x,door.y+door.h+22);intent={t:'door',b:door};act('Heading to the '+door.name+' door.');return}
+  const wall=B.find(b=>wx>b.x&&wx<b.x+b.w&&wy>b.y&&wy<b.y+b.h);
+  if(wall){intent=null;go(wx,Math.max(wy,wall.y+wall.h+24));act(wall.name+' — tap the door or '+wall.keep+'.');return}
+  intent=null;
+  if(Math.hypot(wx-20*T,wy-18.4*T)<50) act('The fountain. Folks gather here.'); else act('Crossing the square.');
+  go(wx,wy);
 }
-function talk(k){ intent=null; const lines={hall:'Ellis: Emberford holds from this hall. Walk the square. Doors only.',lib:'Iova: Quiet in the stacks. City first. Books later.',court:'Bram: Law is stone. So are these walls.',market:'Mira: Stalls open when the square is finished.',forge:'Nettle: Hearth is lit. Steel comes after streets.',kitchen:'Alba: Bread on the plaza tomorrow.',bank:'Rowan: Vault stands. Crowns later.',chapel:'Pip: Light the square, then the altar.',watch:'Gull: East road is goblin country. Stay in the city tonight.'}; act(lines[k.home.kind]||(k.name+' nods.')); }
-function enter(b){ intent=null; act('Doorway of the '+b.name+'. Rooms come next.'); }
-function onPtr(e){ if($('title').style.display!=='none') return; const r=canvas.getBoundingClientRect(), t=e.touches?e.touches[0]:e; tryAct(t.clientX-r.left+cam.x-W/2, t.clientY-r.top+cam.y-H/2); }
-canvas.addEventListener('mousedown',onPtr);
-canvas.addEventListener('touchstart',e=>onPtr(e),{passive:true});
-$('go').onclick=()=>{ $('title').style.display='none'; act('You step onto cobble. Town Hall is north.'); };
-$('btnCenter').onclick=()=>{ goNear(20*T,20.5*T); act('Heading to the plaza fountain.'); };
-$('btnLook').onclick=()=>{ look=!look; act(look?'Look on.':'Look off.'); };
-function drawIsoBox(b){
-  const x=b.x,y=b.y,w=b.w,h=b.h,z=b.h3;
-  ctx.fillStyle='#0005'; ctx.fillRect(x+10,y+h,w,10);
-  ctx.fillStyle=b.side; ctx.beginPath(); ctx.moveTo(x+w,y); ctx.lineTo(x+w+z*0.32,y-z); ctx.lineTo(x+w+z*0.32,y+h-z); ctx.lineTo(x+w,y+h); ctx.fill();
-  ctx.fillStyle=b.top; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+z*0.32,y-z); ctx.lineTo(x+w+z*0.32,y-z); ctx.lineTo(x+w,y); ctx.fill();
-  ctx.fillStyle=b.face; ctx.fillRect(x,y,w,h);
-  ctx.fillStyle='#1a140c88';
-  const n=Math.max(2,Math.floor(w/28));
-  for(let i=0;i<n;i++) ctx.fillRect(x+10+i*((w-20)/n), y+16, 14, 11);
-  ctx.fillStyle='#1a120c'; ctx.fillRect(b.door.x-11,y+h-26,22,26);
-  ctx.fillStyle='#c9a24a'; ctx.fillRect(b.door.x+5,y+h-14,3,3);
-  ctx.strokeStyle='#e8c56acc'; ctx.strokeRect(b.door.x-12,y+h-27,24,27);
-  ctx.fillStyle='#efe6d4'; ctx.font='12px Georgia'; ctx.textAlign='center'; ctx.fillText(b.name,x+w/2,y-z-8);
-  if(b.kind==='forge'){ ctx.fillStyle='rgba(255,120,40,'+(0.35+0.25*Math.sin(time*16))+')'; ctx.fillRect(x+16,y+h-40,22,12); }
-  if(b.kind==='hall'){ ctx.fillStyle='#e8c56a'; ctx.fillRect(x+w/2-12,y-z-16,24,8); }
+function talk(k){intent=null;const L={hall:'Ellis: Sit by the water. This square is home.',bakery:'Alba: Loaves at dusk. Smell that crust.',forge:'Nettle: Warm iron, open door.',tailor:'Fern: Linen on the line.',flower:'Iova: Take a sprig. The square likes color.',inn:'Rowan: Fire inside if the wind picks up.',shop:'Mira: Need a nail, a comb, a story — I keep all three.',green:'Pip: Apples by the crate. Help yourself to look.'};act(L[k.home.kind]||(k.name+' smiles.'))}
+function enter(b){intent=null;act('You stand in the '+b.name+' doorway. Warm light inside.')}
+function onPtr(e){if($('cover').style.display!=='none') return;e.preventDefault();const r=canvas.getBoundingClientRect(),t=e.changedTouches?e.changedTouches[0]:e;tap(t.clientX-r.left+cam.x-W/2,t.clientY-r.top+cam.y-H/2)}
+canvas.addEventListener('pointerdown',onPtr,{passive:false});
+$('enter').onclick=()=>{$('cover').style.display='none';act('Open square. Fountain ahead.')};
+$('home').onclick=()=>{intent=null;go(20*T,20*T);act('Back to the fountain.')};
+function box(b){
+  const x=b.x,y=b.y,w=b.w,h=b.h,z=b.z;
+  ctx.fillStyle='#0003';ctx.fillRect(x+8,y+h,w,10);
+  ctx.fillStyle=b.side;ctx.beginPath();ctx.moveTo(x+w,y);ctx.lineTo(x+w+z*.22,y-z);ctx.lineTo(x+w+z*.22,y+h-z);ctx.lineTo(x+w,y+h);ctx.fill();
+  ctx.fillStyle=b.top;ctx.beginPath();ctx.moveTo(x-6,y+8);ctx.lineTo(x+w/2,y-z);ctx.lineTo(x+w+6,y+8);ctx.closePath();ctx.fill();
+  ctx.fillStyle=b.face;ctx.fillRect(x,y,w,h);
+  ctx.fillStyle='#3a241488'; for(let i=0;i<2;i++) ctx.fillRect(x+16+i*(w/2-10),y+16,16,14);
+  ctx.fillStyle='#3a2418';ctx.fillRect(b.door.x-11,y+h-26,22,26);
+  ctx.fillStyle='#e8c56a';ctx.fillRect(b.door.x+5,y+h-14,3,3);ctx.strokeStyle='#e8c56a';ctx.strokeRect(b.door.x-12,y+h-27,24,27);
+  ctx.fillStyle='#3a2418';ctx.font='12px Georgia';ctx.textAlign='center';ctx.fillText(b.name,x+w/2,y-z-6);
+  if(b.kind==='forge'){ctx.fillStyle='rgba(255,130,50,'+(.3+.2*Math.sin(time*12))+')';ctx.fillRect(x+14,y+h-40,18,10)}
+  if(b.kind==='flower'){ctx.fillStyle='#c45c6a';ctx.fillRect(x+10,y+h-8,w-20,6)}
 }
-function body(p,col){
-  ctx.fillStyle='#0005'; ctx.beginPath(); ctx.ellipse(p.x,p.y+10,10,5,0,0,7); ctx.fill();
-  ctx.fillStyle=col; ctx.beginPath(); ctx.arc(p.x,p.y-6,8,0,7); ctx.fill(); ctx.fillRect(p.x-7,p.y-1,14,12);
-  ctx.fillStyle='#f2d2b0'; ctx.beginPath(); ctx.arc(p.x,p.y-15,5,0,7); ctx.fill();
-  ctx.fillStyle='#efe6d4'; ctx.font='11px Georgia'; ctx.textAlign='center'; ctx.fillText(p.name,p.x,p.y-23);
+function body(p,col,label){
+  ctx.fillStyle='#0003';ctx.beginPath();ctx.ellipse(p.x,p.y+9,8,3.5,0,0,7);ctx.fill();
+  ctx.fillStyle=col;ctx.beginPath();ctx.arc(p.x,p.y-5,7,0,7);ctx.fill();ctx.fillRect(p.x-6,p.y,12,10);
+  ctx.fillStyle='#f0d0b0';ctx.beginPath();ctx.arc(p.x,p.y-13,4.2,0,7);ctx.fill();
+  if(label){ctx.fillStyle='#f3e6c8';ctx.font='11px Georgia';ctx.textAlign='center';ctx.fillText(p.name,p.x,p.y-20)}
 }
 let last=performance.now();
 function tick(now){
-  const dt=Math.min(0.05,(now-last)/1000); last=now; time+=dt;
-  if(bannerT>0){ bannerT-=dt; if(bannerT<=0) $('action').textContent=''; }
-  const dx=player.tx-player.x, dy=player.ty-player.y, d=Math.hypot(dx,dy);
+  const dt=Math.min(.05,(now-last)/1000);last=now;time+=dt;
+  if(cool>0) cool-=dt;
+  if(bannerT>0){bannerT-=dt;if(bannerT<=0)$('banner').textContent=''}
+  const dx=player.tx-player.x,dy=player.ty-player.y,d=Math.hypot(dx,dy);
   if(d>3){
-    const s=player.speed*dt/d, nx=player.x+dx*s, ny=player.y+dy*s, hit=blocked(nx,ny);
+    const s=player.speed*dt/d,nx=player.x+dx*s,ny=player.y+dy*s,hit=blocked(nx,ny);
     if(hit){
       if(!blocked(nx,player.y)) player.x=nx;
       else if(!blocked(player.x,ny)) player.y=ny;
-      else { player.tx=player.x; player.ty=player.y; act('Blocked by the '+hit.name+'.'); intent=null; }
-    } else { player.x=nx; player.y=ny; }
-  } else if(intent){
-    if(intent.type==='talk') talk(intent.who);
-    if(intent.type==='door') enter(intent.b);
+      else {player.tx=player.x;player.ty=player.y;if(intent&&intent.t!=='done') act('Around the '+hit.name+'.');intent=null}
+    } else {player.x=nx;player.y=ny}
+  } else if(intent && intent.t!=='done'){
+    const it=intent; intent={t:'done'};
+    if(it.t==='talk') talk(it.k);
+    if(it.t==='door') enter(it.b);
   }
-  for(const o of walkers){
-    if(Math.random()<0.008){ o.tx=plaza.x+20+Math.random()*(plaza.w-40); o.ty=plaza.y+20+Math.random()*(plaza.h-40); }
+  unstick();
+  for(const o of folk){
+    if(Math.random()<.012){o.tx=15*T+Math.random()*10*T;o.ty=17.4*T+Math.random()*3.2*T}
     const od=Math.hypot(o.tx-o.x,o.ty-o.y);
-    if(od>2){ const nx=o.x+(o.tx-o.x)/od*32*dt, ny=o.y+(o.ty-o.y)/od*32*dt; if(!blocked(nx,ny,8)){ o.x=nx; o.y=ny; } }
+    if(od>2){const nx=o.x+(o.tx-o.x)/od*36*dt,ny=o.y+(o.ty-o.y)/od*36*dt;if(!blocked(nx,ny)){o.x=nx;o.y=ny}}
   }
-  if(marker){ marker.life-=dt; if(marker.life<=0) marker=null; }
-  cam.x=lerp(cam.x,player.x,0.12); cam.y=lerp(cam.y,player.y-20,0.12);
-  ctx.fillStyle='#152018'; ctx.fillRect(0,0,W,H);
-  ctx.save(); ctx.translate(W/2-cam.x,H/2-cam.y);
-  for(let y=6;y<34;y++) for(let x=6;x<36;x++){
-    const px=x*T, py=y*T;
-    let col=(x+y)%2?'#2a3a2c':'#263628';
-    const onRoad=(Math.abs(x-20)<2&&y>10&&y<28)||(Math.abs(y-20)<2&&x>10&&x<30);
-    const onPlaza=x>=16&&x<=24&&y>=17&&y<=23;
-    if(onRoad) col=(x+y)%2?'#4a463c':'#3f3b32';
-    if(onPlaza) col=(x+y)%2?'#5a5648':'#4e4a3e';
-    ctx.fillStyle=col; ctx.fillRect(px,py,T,T);
+  if(marker){marker.life-=dt;if(marker.life<=0)marker=null}
+  cam.x=lerp(cam.x,player.x,.14);cam.y=lerp(cam.y,player.y-12,.14);
+  ctx.fillStyle='#3a3226';ctx.fillRect(0,0,W,H);
+  ctx.save();ctx.translate(W/2-cam.x,H/2-cam.y);
+  for(let y=5;y<31;y++)for(let x=5;x<36;x++){
+    const px=x*T,py=y*T; let col=(x+y)%2?'#cbb89a':'#c2af92';
+    const road=(Math.abs(x-20)<3&&y>8&&y<27)||(Math.abs(y-19)<3&&x>8&&x<32);
+    const sq=x>=13&&x<=27&&y>=15&&y<=23;
+    if(road) col=(x+y)%2?'#b9a888':'#b09f80';
+    if(sq) col=(x+y)%2?'#e6d6b4':'#dccaa8';
+    ctx.fillStyle=col;ctx.fillRect(px,py,T,T);
   }
-  ctx.fillStyle='#3a6a78'; ctx.beginPath(); ctx.arc(20*T,20.2*T,22,0,7); ctx.fill();
-  ctx.strokeStyle='#b7e4f488'; ctx.beginPath(); ctx.arc(20*T,20.2*T,14+Math.sin(time*3)*2,0,7); ctx.stroke();
-  ctx.fillStyle='#e8c56a'; ctx.font='12px Georgia'; ctx.textAlign='center'; ctx.fillText('Plaza',20*T,20.2*T-28);
-  buildings.slice().sort((a,b)=>a.y-b.y).forEach(drawIsoBox);
-  walkers.forEach(w=>body(w,w.c)); keepers.forEach(k=>body(k,k.c)); body(player,'#6a9ad4');
-  if(marker){ ctx.strokeStyle='rgba(232,197,106,'+marker.life+')'; ctx.beginPath(); ctx.arc(marker.x,marker.y,8,0,7); ctx.stroke(); }
+  ctx.fillStyle='#8e9aa0';ctx.beginPath();ctx.arc(20*T,18.4*T,38,0,7);ctx.fill();
+  ctx.fillStyle='#6e8890';ctx.beginPath();ctx.arc(20*T,18.4*T,24,0,7);ctx.fill();
+  ctx.fillStyle='#cfdde0';ctx.beginPath();ctx.arc(20*T,18.4*T,8+Math.sin(time*3),0,7);ctx.fill();
+  ctx.strokeStyle='#e8f4f8aa';ctx.beginPath();ctx.arc(20*T,18.4*T,16+Math.sin(time*2)*2,0,7);ctx.stroke();
+  ctx.fillStyle='#6a4a28';ctx.font='13px Georgia';ctx.textAlign='center';ctx.fillText('Fountain',20*T,18.4*T-48);
+  [[16.2,20.6],[23.8,20.6],[16.2,16.4],[23.8,16.4]].forEach(([tx,ty])=>{ctx.fillStyle='#6a4a28';ctx.fillRect(tx*T-16,ty*T-4,32,8)});
+  [[11.2,15.2],[28.6,15.0],[12.0,21.6],[28.0,21.4]].forEach(([tx,ty])=>{const x=tx*T,y=ty*T;ctx.fillStyle='#2f4a30';ctx.beginPath();ctx.arc(x,y-12,16,0,7);ctx.fill();ctx.fillStyle='#5a3a22';ctx.fillRect(x-3,y-2,6,12)});
+  B.slice().sort((a,c)=>a.y-c.y).forEach(box);
+  folk.forEach(f=>body(f,f.c,false)); keepers.forEach(k=>body(k,'#b8946a',true)); body(player,'#6a8ab4',true);
+  if(marker){ctx.strokeStyle='rgba(200,160,70,'+marker.life+')';ctx.beginPath();ctx.arc(marker.x,marker.y,8,0,7);ctx.stroke()}
   ctx.restore();
-  $('stats').innerHTML='<b>'+player.name+'</b><br>Emberford City<br><span style="opacity:.75">Door or person</span>';
-  $('quest').innerHTML='<b>Square</b><br>Hall north · Library west · Court east · Market & Forge on the south arms.';
+  $('stats').innerHTML='<b>Wanderer</b><br>Town square';
+  $('hint').innerHTML='<b>Gather here</b><br>Fountain middle. Shops on the streets. Tap once — door or name.';
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
